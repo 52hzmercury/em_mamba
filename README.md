@@ -74,7 +74,7 @@ Before training, install:
 
 ```bash
 python scripts/seg_3d/seg_3d_train.py \
-    --data_path /workdir1/echo_dataset/EchoNet-Dynamic \
+    --data_path $$ \
     --mean 0.12741163 0.1279413 0.12912785 \
     --std 0.19557191 0.19562256 0.1965878 \
     --encoder "emmamba" \
@@ -93,7 +93,7 @@ Train on the CAMUS dataset root:
 
 ```bash
 python scripts/seg_3d/seg_3d_camus_train.py \
-    --data_path /workdir1/cn24/data/CAMUS \
+    --data_path $$ \
     --mean 0.12741163 0.1279413 0.12912785 \
     --std 0.19557191 0.19562256 0.1965878 \
     --encoder "emmamba" \
@@ -111,7 +111,7 @@ python scripts/seg_3d/seg_3d_camus_train.py \
 
 ```bash
 python scripts/seg_3d/seg_3d_train.py \
-    --data_path /workdir1/cn24/data/pediatric_echo/A4C \
+    --data_path $$ \
     --mean 0.12741163 0.1279413 0.12912785 \
     --std 0.19557191 0.19562256 0.1965878 \
     --encoder "emmamba" \
