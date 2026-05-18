@@ -56,40 +56,6 @@ class BaseModule(pl.LightningModule):
 
         self.calculate_metrics(set_name, preds, labels)
 
-        # camus
-        # losses = []
-        # value_dsc=[]
-        # value_iou=[]
-        # value_dice_loss=[]
-        #
-        # for output in step_outputs:
-        #     batch_pred = output['batch_preds']
-        #     batch_labels = output['batch_labels']
-        #
-        #     loss = self.criterion(batch_pred, batch_labels)
-        #     losses.append(loss)
-        #
-        #     metrics = self.calculate_metrics_batch(batch_pred, batch_labels)
-        #     # metrics[0][1] value_dsc
-        #     value_dsc.append(metrics[0][1])
-        #     # metrics[1][1] value_iou
-        #     value_iou.append(metrics[1][1])
-        #     # metrics[2][1] value_dice_loss
-        #     value_dice_loss.append(metrics[2][1])
-        #
-        # # 计算所有 loss 的平均值
-        # loss_mean = sum(losses) / len(losses)
-        # self.log(f"{set_name}_loss", loss_mean, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        # # 计算所有 dsc 的平均值
-        # avg_dsc = sum(value_dsc) / len(value_dsc) if value_dsc else 0
-        # self.log(f"{set_name}_dsc", avg_dsc, prog_bar=True, logger=True)
-        # # 计算所有 iou 的平均值
-        # avg_iou = sum(value_iou) / len(value_iou) if value_iou else 0
-        # self.log(f"{set_name}_iou", avg_iou, prog_bar=True, logger=True)
-        # # 计算所有 dice_loss 的平均值
-        # avg_dice_loss = sum(value_dice_loss) / len(value_dice_loss) if value_dice_loss else 0
-        # self.log(f"{set_name}_dice_loss", avg_dice_loss, prog_bar=True, logger=True)
-
     def forward(self, x):
         return self.model.forward(x)
 
@@ -121,7 +87,6 @@ class BaseModule(pl.LightningModule):
 
         # preds, labels = self.postprocess_batch_preds_and_targets(preds, targets)
         preds, labels = self.postprocess_batch_preds_and_targets_camus(preds, targets)
-        # preds, labels = self.postprocess_batch_preds_and_targets_camus_val(preds, targets)
 
         return {'batch_preds': preds, 'batch_labels': labels}
 
@@ -144,14 +109,11 @@ class SegModule(BaseModule):
             img_size=None,
             # loss_type='dice',
             # loss_type='jaccard',
-            # loss_type='hccdie',
-            # loss_type='hccmse',
-            # loss_type='tversky',
             # loss_type='focal',
-            loss_type='dice+jaccard',
+            # loss_type='dice+jaccard',
             # loss_type='dice+focal',
             # loss_type='jaccard+focal',
-            # loss_type='dice+jaccard+focal',
+            loss_type='dice+jaccard+focal',
     ):
         super().__init__()
 
@@ -232,58 +194,8 @@ class SegModule(BaseModule):
             weight_decay=1e-5, amsgrad=True,
         )
 
-        # optimizer = torch.optim.AdamW(
-        #     self.parameters(), lr=1e-5,
-        #     weight_decay=1e-5, amsgrad=True,
-        # )
-
-        # SGD
-        # optimizer = torch.optim.SGD(
-        #     self.parameters(), lr=0.1,  # 设置学习率
-        #     momentum=0.9,  # 设置动量
-        #     weight_decay=1e-5  # 设置权重衰减
-        # )
-
-        # MultiStepLR
-        # 默认
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
-          optimizer, milestones=[45, 60], gamma=0.1,
+          optimizer, milestones=[35, 50], gamma=0.1,
         )
-
-        # 35 50
-        # scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        #     optimizer, milestones=[35, 50], gamma=0.1,
-        # )
-
-        # 定义LinearLR调度器，线性增加
-        # scheduler = LinearLR(
-        #     optimizer,
-        #     end_lr=1e-2,  # 最终学习率
-        #     num_iter=60,  # 总迭代次数
-        # )
-
-        # 定义ExponentialLR调度器
-        # scheduler = ExponentialLR(
-        #     optimizer,
-        #     end_lr=1e-2,  # 最终学习率
-        #     num_iter=60,  # 总迭代次数
-        # )
-
-        # 定义WarmupCosineSchedule调度器
-        # scheduler = WarmupCosineSchedule(
-        #     optimizer,
-        #     warmup_steps=5,  # 线性warmup步骤
-        #     t_total=60,  # 总训练步骤
-        #     cycles=0.5,  # 余弦周期
-        # )
-
-        # 定义LinearWarmupCosineAnnealingLR调度器
-        # scheduler = LinearWarmupCosineAnnealingLR(
-        #     optimizer,
-        #     warmup_epochs=5,  # 热身epoch数
-        #     max_epochs=60,  # 总训练epoch数
-        #     warmup_start_lr=1e-6,  # 热身开始的学习率
-        #     eta_min=1e-6,  # 最小学习率
-        # )
 
         return [optimizer], [scheduler]

@@ -60,111 +60,53 @@ class LayerNorm(nn.Module):
 
 class Point:
     def __init__(self, x=0, y=0):
-        self.x = x  # X坐标
-        self.y = y  # Y坐标
-
-
-class Hilbert:
-    def __init__(self):
-        self.hilbert_maps = {}
-        for n in [64, 32, 16, 8, 4]:
-            self.hilbert_maps[n] = self.precompute_hilbert_map(n)
-
-    def precompute_hilbert_map(self, n):
-        hilbert_map = []
-        for d in range(n * n):
-            pt = Point()
-            self.d2xy(n, d, pt)
-            hilbert_map.append([pt.x, pt.y])
-        return torch.tensor(hilbert_map, dtype=torch.long)  # 存储为张量
-
-    def rot(self, n, pt, rx, ry):
-        if ry == 0:
-            if rx == 1:
-                pt.x = n - 1 - pt.x
-                pt.y = n - 1 - pt.y
-
-            # Swap x and y
-            pt.x, pt.y = pt.y, pt.x
-
-    # Hilbert代码到XY坐标
-    def d2xy(self, n, d, pt):
-        pt.x, pt.y = 0, 0
-        t = d
-        s = 1
-        while s < n:
-            rx = 1 & (t // 2)
-            ry = 1 & (t ^ rx)
-            self.rot(s, pt, rx, ry)
-            pt.x += s * rx
-            pt.y += s * ry
-            t //= 4
-            s *= 2
-
-    # XY坐标到Hilbert代码转换
-    def xy2d(self, n, pt):
-        d = 0
-        s = n // 2
-        while s > 0:
-            rx = 1 if (pt.x & s) > 0 else 0
-            ry = 1 if (pt.y & s) > 0 else 0
-            d += s * s * ((3 * rx) ^ ry)
-            self.rot(s, pt, rx, ry)
-            s //= 2
-        return d
+        self.x = x
+        self.y = y
 
 
 class MooreCurve:
     def __init__(self):
         self.mooreCurveMaps = {}
-        # 预计算常见尺寸的映射表
         for side_length in [128, 64, 32, 16, 8, 4]:
             self.mooreCurveMaps[side_length] = self.precompute_moore_curve_map(side_length)
 
     def precompute_moore_curve_map(self, side_length):
-        """预计算指定边长的摩尔曲线映射表"""
-        # 计算阶数（根据边长推导）
         n = int(math.log2(side_length))
 
-        # 生成坐标序列
         points = self.moore_curve_order_to_coords(n)
 
-        # 计算坐标范围
         min_x = min(p[0] for p in points)
         min_y = min(p[1] for p in points)
 
         curve_map = []
-        # 填充遍历顺序
+
         for step, (x, y) in enumerate(points):
             curve_map.append((y - min_y, x - min_x))
 
         return torch.tensor(curve_map, dtype=torch.long)
 
     def generate_moore_curve_string(self, n):
-        """生成n阶L-system字符串 """
         axiom = 'LFL+F+LFL'
         rules = {
             'L': '-RF+LFL+FR-',
             'R': '+LF-RFR-FL+',
         }
         current = axiom
-        for _ in range(n - 1):  # 替换次数为n-1次
+        for _ in range(n - 1):
             new_str = []
             for char in current:
-                new_str.append(rules.get(char, char))  # 应用规则或保留原字符
+                new_str.append(rules.get(char, char))
             current = ''.join(new_str)
         return current
 
     def moore_curve_order_to_coords(self, n):
-        """解析L-system字符串生成坐标序列"""
         string = self.generate_moore_curve_string(n)
 
-        # 初始化状态
-        x, y = 0, 0
-        direction = 0  # 0:东 1:北 2:西 3:南
-        points = [(x, y)]  # 包含起点
 
-        # 解析指令
+        x, y = 0, 0
+        direction = 0
+        points = [(x, y)]
+
         for char in string:
             if char == 'F':
                 # 根据当前方向移动
@@ -178,140 +120,39 @@ class MooreCurve:
                     y -= 1
                 points.append((x, y))
             elif char == '+':
-                direction = (direction - 1) % 4  # 右转
+                direction = (direction - 1) % 4
             elif char == '-':
-                direction = (direction + 1) % 4  # 左转
+                direction = (direction + 1) % 4
 
         return points
 
     @staticmethod
     def coords_to_2d_array(points):
-        """将坐标序列转换为二维数组（辅助函数）"""
         if not points:
             return []
 
-        # 计算坐标范围
         min_x = min(p[0] for p in points)
         max_x = max(p[0] for p in points)
         min_y = min(p[1] for p in points)
         max_y = max(p[1] for p in points)
 
-        # 初始化数组
         rows = max_y - min_y + 1
         cols = max_x - min_x + 1
         grid = [[0 for _ in range(cols)] for _ in range(rows)]
 
-        # 填充遍历顺序
         for step, (x, y) in enumerate(points):
             grid[y - min_y][x - min_x] = step + 1
 
         return grid
 
 
-class DiagonalMap:
-    def __init__(self):
-        self.diagonalMaps = {}
-        # 预计算常见尺寸的映射表
-        for side_length in [128, 64, 32, 16, 8, 4]:
-            self.diagonalMaps[side_length] = self.precompute_diagonal_order(side_length)
-
-    def precompute_diagonal_order(self, side_length):
-        """预计算坐标映射关系，返回一维坐标到二维坐标的列表"""
-        H = side_length
-        W = side_length
-        coord_map = []
-        for s in range(H + W - 1):
-            start_row = max(0, s - (W - 1))
-            end_row = min(H - 1, s)
-            for row in range(end_row, start_row - 1, -1):  # 逆序保证右上到左下
-                coord = (row, s - row)  # 存储二维坐标
-                coord_map.append(coord)
-        return torch.tensor(coord_map, dtype=torch.long)
-
-class ZCurveMapper:
-    def __init__(self):
-        # 定义需要预计算的边长列表
-        self.target_sizes = [4, 8, 16, 32, 64]
-
-        # 存储映射表的字典:
-        # Key = 边长 (int), Value = List[(x, y)]
-        self.maps = {}
-
-        # 初始化时直接执行预计算
-        self._precompute_all()
-
-    def _z_index_to_xy(self, z_index):
-        """
-        核心位运算逻辑：
-        将 Z-index 解码为 (x, y)。
-        x = 偶数位组合, y = 奇数位组合。
-        """
-        # --- 重新实现更稳健的循环逻辑 ---
-        x = 0
-        y = 0
-        for i in range(16):  # 遍历16位足够支持到 256x256
-            bit = (z_index >> i) & 1
-            if i % 2 == 0:  # 偶数位 -> y
-                y |= (bit << (i // 2))
-            else:  # 奇数位 -> x
-                x |= (bit << (i // 2))
-        return x, y
-
-    def _precompute_all(self):
-        """内部方法：生成所有指定尺寸的映射表"""
-
-        for size in self.target_sizes:
-            total_points = size * size
-            # 使用列表作为查找表，Index即为列表下标
-            lookup_table = [None] * total_points
-
-            for z in range(total_points):
-                lookup_table[z] = self._z_index_to_xy(z)
-
-            self.maps[size] = torch.tensor(lookup_table, dtype=torch.long)
-
-    def get_coord(self, size, z_index):
-        """
-        获取坐标的主方法
-        :param size: 图片边长 (4, 8, 16, 32, 64)
-        :param z_index: 一维索引
-        :return: (x, y) 元组
-        """
-        if size not in self.maps:
-            raise ValueError(f"Size {size} 未预计算。可用尺寸: {self.target_sizes}")
-
-        # 边界检查
-        if z_index < 0 or z_index >= len(self.maps[size]):
-            raise IndexError(f"Index {z_index} 超出尺寸 {size}x{size} 的范围")
-
-        return self.maps[size][z_index]
-
-    def print_grid_preview(self, size):
-        """工具方法：打印网格预览以验证形状"""
-        if size not in self.maps:
-            return
-
-        print(f"\n--- Preview Grid: {size}x{size} ---")
-        grid = [[0] * size for _ in range(size)]
-        table = self.maps[size]
-
-        # 反向填充用于显示：知道 index -> 填入 (x,y)
-        for z, (x, y) in enumerate(table):
-            grid[x][y] = z
-
-        for row in grid:
-            print(" | ".join([f"{str(val).rjust(3)}" for val in row]))
-        print("-" * 30)
 
 class MambaLayer(nn.Module):
-    def __init__(self, dim, d_state=16, d_conv=4, expand=2, num_slices=None, mooreMaps=None, diagonalMaps=None, hilbertMaps=None, ZMaps=None):
+    def __init__(self, dim, d_state=16, d_conv=4, expand=2, num_slices=None, mooreMaps=None):
         super().__init__()
         self.dim = dim
         self.norm = nn.LayerNorm(dim)
         self.mooreMaps = mooreMaps
-        self.diagonalMaps = diagonalMaps
-        self.hilbertMaps = hilbertMaps
-        self.ZMaps = ZMaps
         self.mamba = Mamba(
             d_model=dim,  # Model dimension d_model
             d_state=d_state,  # SSM state expansion factor
@@ -320,127 +161,6 @@ class MambaLayer(nn.Module):
             bimamba_type="v3",
             nslices=num_slices,
         )
-
-    def ZFlat(self, tensor, ZMap):
-        B, C, h, w, d = tensor.shape
-        device = tensor.device
-        coord_map = ZMap.to(device)
-
-        total_elements = h * w * d
-        i_all = torch.arange(total_elements, device=device)
-        frame_size = h * w
-        i_in_frame = i_all % frame_size
-        # f_idx = i_all // frame_size
-        f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
-
-        x_y = coord_map[i_in_frame]
-        x_idx, y_idx = x_y[:, 0], x_y[:, 1]
-
-        flat = tensor[:, :, x_idx, y_idx, f_idx]
-        return flat
-
-    def ZReshape(self, flatTensor, ZMap):
-        B, C, total_elements = flatTensor.shape
-        device = flatTensor.device
-        hw = ZMap.size(0)
-        h = int(math.sqrt(hw))
-        w = h
-        d = total_elements // hw
-
-        reshapeTensor = torch.zeros((B, C, h, w, d), dtype=flatTensor.dtype, device=device)
-        i_all = torch.arange(total_elements, device=device)
-        frame_size = h * w
-        # f_idx = i_all // frame_size
-        f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
-        i_in_frame = i_all % frame_size
-
-        coord_map = ZMap.to(device)
-        x_y = coord_map[i_in_frame]
-        x_idx, y_idx = x_y[:, 0], x_y[:, 1]
-
-        reshapeTensor[:, :, x_idx, y_idx, f_idx] = flatTensor
-        return reshapeTensor
-
-    def hilbertFlat(self, tensor, hilbertMap):
-        B, C, h, w, d = tensor.shape
-        device = tensor.device
-        coord_map = hilbertMap.to(device)
-
-        total_elements = h * w * d
-        i_all = torch.arange(total_elements, device=device)
-        frame_size = h * w
-        i_in_frame = i_all % frame_size
-        # f_idx = i_all // frame_size
-        f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
-
-        x_y = coord_map[i_in_frame]
-        x_idx, y_idx = x_y[:, 0], x_y[:, 1]
-
-        flat = tensor[:, :, x_idx, y_idx, f_idx]
-        return flat
-
-    def hilbertReshape(self, flatTensor, hilbertMap):
-        B, C, total_elements = flatTensor.shape
-        device = flatTensor.device
-        hw = hilbertMap.size(0)
-        h = int(math.sqrt(hw))
-        w = h
-        d = total_elements // hw
-
-        reshapeTensor = torch.zeros((B, C, h, w, d), dtype=flatTensor.dtype, device=device)
-        i_all = torch.arange(total_elements, device=device)
-        frame_size = h * w
-        # f_idx = i_all // frame_size
-        f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
-        i_in_frame = i_all % frame_size
-
-        coord_map = hilbertMap.to(device)
-        x_y = coord_map[i_in_frame]
-        x_idx, y_idx = x_y[:, 0], x_y[:, 1]
-
-        reshapeTensor[:, :, x_idx, y_idx, f_idx] = flatTensor
-        return reshapeTensor
-
-
-    def DiagonalFlat(self, tensor, diagonalMap):
-        B, C, h, w, d = tensor.shape
-        device = tensor.device
-        coord_map = diagonalMap.to(device)
-
-        total_elements = h * w * d
-        i_all = torch.arange(total_elements, device=device)
-        frame_size = h * w
-        i_in_frame = i_all % frame_size
-        # f_idx = i_all // frame_size
-        f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
-
-        x_y = coord_map[i_in_frame]
-        x_idx, y_idx = x_y[:, 0], x_y[:, 1]
-
-        flat = tensor[:, :, x_idx, y_idx, f_idx]
-        return flat
-
-    def DiagonalReshape(self, flatTensor, diagonalMap):
-        B, C, total_elements = flatTensor.shape
-        device = flatTensor.device
-        hw = diagonalMap.size(0)
-        h = int(math.sqrt(hw))
-        w = h
-        d = total_elements // hw
-
-        reshapeTensor = torch.zeros((B, C, h, w, d), dtype=flatTensor.dtype, device=device)
-        i_all = torch.arange(total_elements, device=device)
-        frame_size = h * w
-        # f_idx = i_all // frame_size
-        f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
-        i_in_frame = i_all % frame_size
-
-        coord_map = diagonalMap.to(device)
-        x_y = coord_map[i_in_frame]
-        x_idx, y_idx = x_y[:, 0], x_y[:, 1]
-
-        reshapeTensor[:, :, x_idx, y_idx, f_idx] = flatTensor
-        return reshapeTensor
 
     def mooreFlat(self, tensor, mooreMap):
         B, C, h, w, d = tensor.shape
@@ -451,7 +171,6 @@ class MambaLayer(nn.Module):
         i_all = torch.arange(total_elements, device=device)
         frame_size = h * w
         i_in_frame = i_all % frame_size
-        # f_idx = i_all // frame_size
         f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
 
         x_y = coord_map[i_in_frame]
@@ -471,7 +190,6 @@ class MambaLayer(nn.Module):
         reshapeTensor = torch.zeros((B, C, h, w, d), dtype=flatTensor.dtype, device=device)
         i_all = torch.arange(total_elements, device=device)
         frame_size = h * w
-        # f_idx = i_all // frame_size
         f_idx = torch.div(i_all, frame_size, rounding_mode='trunc')
         i_in_frame = i_all % frame_size
 
@@ -486,33 +204,6 @@ class MambaLayer(nn.Module):
         B, C = x.shape[:2]
         x_skip = x
         assert C == self.dim
-        n_tokens = x.shape[2:].numel()
-        img_dims = x.shape[2:]
-        img_dims_dhw = x.permute(0, 1, 4, 3, 2).shape[2:]
-
-        # 后三维展平为一维进行扫描
-        # 横向
-        # x_flat = x.reshape(B, C, n_tokens).transpose(-1, -2)
-        # x_norm = self.norm(x_flat)
-        # x_mamba = self.mamba(x_norm)
-        # # 恢复为原来的形状
-        # out = x_mamba.transpose(-1, -2).reshape(B, C, *img_dims)
-
-        # 竖向
-        # x_flat_vertical = x.permute(0, 1, 4, 3, 2).reshape(B, C, n_tokens).transpose(-1, -2)
-        # x_norm = self.norm(x_flat_vertical)
-        # x_mamba = self.mamba(x_norm)
-        # # 恢复为原来的形状
-        # out = x_mamba.transpose(-1, -2).reshape(B, C, *img_dims_dhw).permute(0, 1, 3, 4, 2)
-
-        # 斜向
-        # frameSize = x.shape[-2]
-        # diagonalMap = self.diagonalMaps[frameSize]
-        # x_dgflat = self.DiagonalFlat(x, diagonalMap).transpose(-1, -2)
-        # x_norm = self.norm(x_dgflat)
-        # x_mamba = self.mamba(x_norm)
-        # # 恢复为原来的形状
-        # out = self.DiagonalReshape(x_mamba.transpose(-1, -2), diagonalMap)
 
         # MRscan
         frameSize = x.shape[-2]
@@ -520,26 +211,7 @@ class MambaLayer(nn.Module):
         x_MRflat = self.mooreFlat(x, mooreMap).transpose(-1, -2)
         x_norm = self.norm(x_MRflat)
         x_mamba = self.mamba(x_norm)
-        # 恢复为原来的形状
         out = self.mooreReshape(x_mamba.transpose(-1, -2), mooreMap)
-
-        # Hibertscan
-        # frameSize = x.shape[-2]
-        # hilbertMap = self.hilbertMaps[frameSize]
-        # x_HBflat = self.mooreFlat(x, hilbertMap).transpose(-1, -2)
-        # x_norm = self.norm(x_HBflat)
-        # x_mamba = self.mamba(x_norm)
-        # # 恢复为原来的形状
-        # out = self.hilbertReshape(x_mamba.transpose(-1, -2), hilbertMap)
-
-        # z scan
-        # frameSize = x.shape[-2]
-        # ZMap = self.ZMaps[frameSize]
-        # x_Zflat = self.ZFlat(x, ZMap).transpose(-1, -2)
-        # x_norm = self.norm(x_Zflat)
-        # x_mamba = self.mamba(x_norm)
-        # # 恢复为原来的形状
-        # out = self.ZReshape(x_mamba.transpose(-1, -2), ZMap)
 
         out = out + x_skip
 
@@ -606,13 +278,10 @@ class GSC(nn.Module):
 class MambaEncoder(nn.Module):
     def __init__(self, in_chans=1, depths=[2, 2, 2, 2], dims=[48, 96, 192, 384],
                  drop_path_rate=0., layer_scale_init_value=1e-6, out_indices=[0, 1, 2, 3], mooreMaps=None,
-                 diagonalMaps=None, hilbertMaps=None, ZMaps=None):
+                 ):
         super().__init__()
 
         self.mooreMaps = mooreMaps
-        self.diagonalMaps = diagonalMaps
-        self.hilbertMaps = hilbertMaps
-        self.ZMaps = ZMaps
         self.downsample_layers = nn.ModuleList()  # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
             nn.Conv3d(in_chans, dims[0], kernel_size=7, stride=2, padding=3),
@@ -634,7 +303,7 @@ class MambaEncoder(nn.Module):
             gsc = GSC(dims[i])
 
             stage = nn.Sequential(
-                *[MambaLayer(dim=dims[i], num_slices=num_slices_list[i], mooreMaps=mooreMaps, diagonalMaps=diagonalMaps, hilbertMaps=hilbertMaps, ZMaps=ZMaps)
+                *[MambaLayer(dim=dims[i], num_slices=num_slices_list[i], mooreMaps=mooreMaps)
                   for j in
                   range(depths[i])]
             )
@@ -699,9 +368,6 @@ class emmamba(nn.Module):
         self.layer_scale_init_value = layer_scale_init_value
 
         mooreMaps = MooreCurve().mooreCurveMaps
-        diagonalMaps = DiagonalMap().diagonalMaps
-        hilbertMaps = Hilbert().hilbert_maps
-        ZMaps = ZCurveMapper().maps
 
         self.spatial_dims = spatial_dims
         self.vit = MambaEncoder(in_chans,
@@ -710,9 +376,6 @@ class emmamba(nn.Module):
                                 drop_path_rate=drop_path_rate,
                                 layer_scale_init_value=layer_scale_init_value,
                                 mooreMaps=mooreMaps,
-                                diagonalMaps=diagonalMaps,
-                                hilbertMaps=hilbertMaps,
-                                ZMaps=ZMaps
                                 )
         self.encoder1 = UnetrBasicBlock(
             spatial_dims=spatial_dims,
@@ -863,10 +526,3 @@ def clean_state_dict(state_dict):
             name = name[7:]
         new_state_dict[name] = v
     return new_state_dict
-
-
-
-
-
-
-
